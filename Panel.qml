@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Layouts
-import Quickshell
 import Quickshell.Io
 import qs.Commons
 import qs.Ui
@@ -679,7 +678,7 @@ Panel {
             font.family: root.panelFont
             font.pixelSize: Style.font.caption
             color: root.dimColor
-            text: "Add a path to a zapret config file (e.g. a copy of the stock /etc or /opt/zapret config, or one from a previous setup). \"Use\" applies the config (the store keeps a plain stock config safe as \"default\") and restarts zapret. \"×\" removes a config. On first use the plugin provisions a \"default\" config automatically: it adopts the existing live config, or deploys the bundled stock one if zapret never got one."
+            text: "Add a path to a zapret config file (e.g. a copy of the stock /etc or /opt/zapret config, or one from a previous setup)."
           }
         }
 
