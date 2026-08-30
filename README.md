@@ -31,7 +31,7 @@ Developed and validated on Omarchy 4.0.1.
 1. Copy the `KryakeN.Omarchy.Zapret` folder to your plugins directory and register it:
 
    ```sh
-   cp -r KryakeN.Omarchy.Zapret "~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret"
+   cp -r KryakeN.Omarchy.Zapret ~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret
    omarchy plugin validate "~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret"
    ```
 

@@ -602,7 +602,7 @@ Panel {
 
             Rectangle {
               Layout.fillWidth: true
-              height: Style.space(28)
+              Layout.preferredHeight: Style.space(28)
               radius: 2
               color: root.alpha(root.foregroundColor, 0.05)
               border.color: root.alpha(root.dimColor, 0.25)
@@ -636,8 +636,8 @@ Panel {
             }
 
             Rectangle {
-              width: 64
-              height: Style.space(28)
+              Layout.preferredWidth: 64
+              Layout.preferredHeight: Style.space(28)
               radius: 2
               color: root.alpha(root.foregroundColor, 0.08)
               border.color: root.alpha(root.dimColor, 0.3)
@@ -671,15 +671,6 @@ Panel {
             color: root.accentColor
             visible: root._cfgMsg !== ""
           }
-
-          Text {
-            width: parent.width
-            wrapMode: Text.WordWrap
-            font.family: root.panelFont
-            font.pixelSize: Style.font.caption
-            color: root.dimColor
-            text: "Add a path to a zapret config file (e.g. a copy of the stock /etc or /opt/zapret config, or one from a previous setup)."
-          }
         }
 
         PanelSeparator {
@@ -692,18 +683,11 @@ Panel {
           wrapMode: Text.WordWrap
           font.family: root.panelFont
           font.pixelSize: Style.font.caption
-          color: !root.isRunning && root.strategy === "providers off"
-            ? root.alpha(root.accentColor, 0.9)
-            : root.dimColor
+          color: root.dimColor
           text: {
             var parts = []
             parts.push("Service: " + root.serviceName + ".service")
-            if (root._activeProfile !== "") parts.push("Profile: " + root._activeProfile)
-            if (root.strategy !== "") parts.push("Strategy: " + root.strategy)
             if (root.configPath !== "") parts.push("Config: " + root.configPath)
-            if (!root.isRunning && root.strategy === "providers off") {
-              parts.push("Hint: all providers are off, toggle has nothing to keep running. Enable NFQWS/TPWS in the chosen config.")
-            }
             return parts.join("\n")
           }
         }
