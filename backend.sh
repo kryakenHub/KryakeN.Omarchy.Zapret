@@ -1,5 +1,5 @@
 #!/bin/sh
-# KryakeN.zapret backend: manage the zapret DPI-evasion daemon via systemd.
+# KryakeN.Omarchy.Zapret backend: manage the zapret DPI-evasion daemon via systemd.
 #
 # Environment:
 #   ZAPRET_SERVICE      systemd unit controlling zapret (default: zapret)

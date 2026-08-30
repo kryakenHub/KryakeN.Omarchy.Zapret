@@ -10,7 +10,7 @@ import "Model.js" as Model
 // strategy and logs.
 Panel {
   id: root
-  moduleName: "KryakeN.zapret"
+  moduleName: "KryakeN.Omarchy.Zapret"
   manageIpc: false
 
   component SmallBtn: Rectangle {
@@ -133,7 +133,7 @@ Panel {
     if (text === "") return
     var o = null
     try { o = JSON.parse(text) } catch (e) {
-      console.log("[KryakeN.zapret] bad serve reply: " + text)
+      console.log("[KryakeN.Omarchy.Zapret] bad serve reply: " + text)
       return
     }
     var idx = -1
@@ -142,7 +142,7 @@ Panel {
     }
     serveGuard.stop()
     if (idx < 0) {
-      console.log("[KryakeN.zapret] serve reply for unknown id " + o.id)
+      console.log("[KryakeN.Omarchy.Zapret] serve reply for unknown id " + o.id)
       return
     }
     var item = root._serveQueue.splice(idx, 1)[0]
@@ -207,13 +207,13 @@ Panel {
         if (out !== "") root._cfgMsg = out
         if (root._clearAddOnSuccess) { root._addInput = ""; root._addName = "" }
         root._clearAddOnSuccess = false
-        console.log("[KryakeN.zapret] configs add: out=" + out + " err=" + err)
+        console.log("[KryakeN.Omarchy.Zapret] configs add: out=" + out + " err=" + err)
         root.refreshStatus()
       },
       function(code, out, err) {
         root._cfgMsg = (err || out || "config operation failed").trim()
         root._clearAddOnSuccess = false
-        console.log("[KryakeN.zapret] configs add failed: rc=" + code + " out=" + out + " err=" + err)
+        console.log("[KryakeN.Omarchy.Zapret] configs add failed: rc=" + code + " out=" + out + " err=" + err)
         root.refreshStatus()
       })
   }
@@ -328,7 +328,7 @@ Panel {
     repeat: false
     onTriggered: {
       if (statusProcess.running) {
-        console.log("[KryakeN.zapret] status watchdog: aborting stuck status process")
+        console.log("[KryakeN.Omarchy.Zapret] status watchdog: aborting stuck status process")
         statusProcess.running = false
         Model.state.error = "status timeout"
         root._error = Model.state.error
@@ -347,7 +347,7 @@ Panel {
     }
     stderr: StdioCollector { id: serveStderr }
     onStarted: {
-      console.log("[KryakeN.zapret] serve up")
+      console.log("[KryakeN.Omarchy.Zapret] serve up")
       root._serveUp = true
       root._serveFlush()
       serveGuard.restart()
@@ -355,7 +355,7 @@ Panel {
     onExited: function(exitCode) {
       root._serveUp = false
       root._serveFailAll("privilege helper exited (" + exitCode + ")")
-      console.log("[KryakeN.zapret] serve exited: " + exitCode)
+      console.log("[KryakeN.Omarchy.Zapret] serve exited: " + exitCode)
     }
   }
 
@@ -365,7 +365,7 @@ Panel {
     repeat: false
     onTriggered: {
       if (serveProcess.running) {
-        console.log("[KryakeN.zapret] serve watchdog: restarting stuck helper")
+        console.log("[KryakeN.Omarchy.Zapret] serve watchdog: restarting stuck helper")
         serveProcess.running = false
       } else {
         root._serveFailAll("privilege helper did not start")

@@ -1,10 +1,14 @@
-# KryakeN.zapret — Zapret DPI-circumvention controls
+# KryakeN.Omarchy.Zapret — Zapret DPI-circumvention controls
 
 Omarchy bar widget + CLI to manage the systemd-managed `zapret` daemon: status,
 start/stop, autostart, config profiles and logs.
 
 This is a user-installed plugin; by itself it does not evade anything — it
 controls whatever `zapret` installation you have on the system.
+
+## Screenshots
+
+![Zapret control panel](preview.png)
 
 ## Compatibility
 
@@ -24,18 +28,18 @@ Developed and validated on Omarchy 4.0.1.
 
 ## Install
 
-1. Copy the `KryakeN.zapret` folder to your plugins directory and register it:
+1. Copy the `KryakeN.Omarchy.Zapret` folder to your plugins directory and register it:
 
    ```sh
-   cp -r KryakeN.zapret "~/.config/omarchy/plugins/KryakeN.zapret"
-   omarchy plugin validate "~/.config/omarchy/plugins/KryakeN.zapret"
+   cp -r KryakeN.Omarchy.Zapret "~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret"
+   omarchy plugin validate "~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret"
    ```
 
 2. Add the widget to the bar in `~/.config/omarchy/shell.json`, e.g. in
    `bar.layout.right`:
 
    ```jsonc
-   { "id": "KryakeN.zapret" }
+   { "id": "KryakeN.Omarchy.Zapret" }
    ```
 
 3. Restart the shell and open the Zapret panel. On first use the plugin
@@ -89,7 +93,7 @@ Privileged commands (unit control, profile store) use `sudo` from a TTY and
 
 All privileged operations performed from the panel (toggle, autostart, config
 add/select/remove/migrate) run through a single persistent helper process:
-`pkexec backend.sh serve`. `KryakeN.vpn` uses exactly the same scheme.
+`pkexec backend.sh serve`. `KryakeN.Omarchy.Vless` uses exactly the same scheme.
 
 - The helper is **not** started at boot — only on your first privileged action
   in a shell session. Starting it is the only point where a password is asked
