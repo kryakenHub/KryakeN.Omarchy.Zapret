@@ -1,0 +1,736 @@
+import QtQuick
+import QtQuick.Layouts
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import qs.Ui
+import "Model.js" as Model
+
+// Zapret control panel: status, start/stop, autostart, config profiles,
+// strategy and logs.
+Panel {
+  id: root
+  moduleName: "KryakeN.zapret"
+  manageIpc: false
+
+  component SmallBtn: Rectangle {
+    property string label: ""
+    property var onTap: null
+    property color fg: Color.foreground
+    property color dim: Qt.darker(fg, 1.4)
+
+    width: Math.max(24, label.length * 7 + 12)
+    height: Style.space(20)
+    radius: 2
+    color: Qt.rgba(fg.r, fg.g, fg.b, 0.06)
+    border.color: Qt.rgba(dim.r, dim.g, dim.b, 0.3)
+    border.width: 1
+
+    Text {
+      anchors.centerIn: parent
+      text: parent.label
+      color: parent.fg
+      font.family: Style.font.family
+      font.pixelSize: Style.font.caption
+      font.bold: true
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      onClicked: { if (parent.onTap) parent.onTap() }
+    }
+  }
+
+  property var anchorItem: null
+  property var hostWidget: null
+
+  readonly property string serviceName: "zapret"
+
+  // Constant switch geometry mirroring ToggleSwitch's rest-state rule
+  // (trackHeight 22, trackWidth x1.9, cursorPad 6 per side) so the knob does
+  // not wobble when `busy` flips `interactive` and the cursor ring collapses.
+  readonly property int _switchW: Math.round(Math.max(22, Math.round(Style.spacing.controlHeight * 0.55)) * 1.9) + Style.space(12)
+  readonly property int _switchH: Math.max(22, Math.round(Style.spacing.controlHeight * 0.55)) + Style.space(12)
+
+  // QML-notifyable mirrors of the backend state. The backend updates a plain
+  // JS object (Model.state) which emits no change signals, so bindings would
+  // be frozen at their initial frame; we copy into real properties instead and
+  // bind all UI below to these.
+  property bool _installed: false
+  property bool _running: false
+  property bool _enabled: false
+  property string _strategy: ""
+  property string _config: ""
+  property string _error: ""
+  property var _profiles: []
+  property string _activeProfile: ""
+  property string _cfgMsg: ""
+  // TextInput содержимое (ids дочерних полей не резолвятся из root-скоупа —
+  // грузим значение в свойство и читаем его).
+  property string _addInput: ""
+  property string _addName: ""
+  property bool _clearAddOnSuccess: false
+
+  // Privileged ops run through a single per-session serve process (pkexec once
+  // per login; every request is then answered over its stdin/stdout, so no
+  // password prompt per toggle). Requests are serialised server-side; replies
+  // carry the request id and are routed back to per-request callbacks.
+  property int _serveInFlight: 0
+  property var _serveQueue: []
+  property int _serveSeq: 0
+  property bool _serveUp: false
+
+  readonly property bool isRunning: root._running
+  readonly property bool isEnabled: root._enabled
+  readonly property bool isInstalled: root._installed
+  readonly property string strategy: root._strategy
+  readonly property string configPath: root._config
+  readonly property string lastError: root._error
+  readonly property bool isBusy: root._serveInFlight > 0
+
+  readonly property color foregroundColor: root.bar && root.bar.foreground !== undefined ? root.bar.foreground : Color.foreground
+  readonly property color dimColor: Qt.darker(root.foregroundColor, 1.4)
+  readonly property color accentColor: root.isRunning ? "#10B981" : "#EF4444"
+  readonly property string panelFont: root.bar ? root.bar.fontFamily : Style.font.family
+  readonly property string daemonScriptPath:
+    Qt.resolvedUrl("backend.sh").toString().replace(/^file:\/\//, "")
+
+  readonly property string statusMeta:
+    !root.isInstalled
+      ? "Not installed"
+      : root.lastError !== ""
+        ? "Error"
+        : (root.isRunning ? "Protection Active" : "Standby")
+
+  function alpha(c, a) { return Qt.rgba(c.r, c.g, c.b, a) }
+
+  function _serveEnqueue(args, okCb, errCb) {
+    var item = { args: args, ok: okCb, err: errCb, id: root._serveSeq++ }
+    root._serveQueue.push(item)
+    root._serveInFlight = root._serveQueue.length
+    serveGuard.restart()
+    if (root._serveUp && serveProcess.running) {
+      serveProcess.write(JSON.stringify({ id: item.id, args: item.args }) + "\n")
+    } else {
+      root._serveEnsure()
+    }
+  }
+
+  function _serveEnsure() {
+    if (serveProcess.running) return
+    serveProcess.command = ["pkexec", root.daemonScriptPath, "serve"]
+    serveProcess.running = true
+  }
+
+  function _serveFlush() {
+    for (var i = 0; i < root._serveQueue.length; i++) {
+      serveProcess.write(JSON.stringify({ id: root._serveQueue[i].id, args: root._serveQueue[i].args }) + "\n")
+    }
+  }
+
+  function _serveLine(raw) {
+    var text = String(raw || "").trim()
+    if (text === "") return
+    var o = null
+    try { o = JSON.parse(text) } catch (e) {
+      console.log("[KryakeN.zapret] bad serve reply: " + text)
+      return
+    }
+    var idx = -1
+    for (var i = 0; i < root._serveQueue.length; i++) {
+      if (root._serveQueue[i].id === o.id) { idx = i; break }
+    }
+    serveGuard.stop()
+    if (idx < 0) {
+      console.log("[KryakeN.zapret] serve reply for unknown id " + o.id)
+      return
+    }
+    var item = root._serveQueue.splice(idx, 1)[0]
+    root._serveInFlight = root._serveQueue.length
+    if (o.code === 0) {
+      if (item.ok) item.ok(String(o.out || ""), String(o.err || ""), Number(o.code))
+    } else {
+      if (item.err) item.err(Number(o.code), String(o.out || ""), String(o.err || ""))
+      else if (item.ok) item.ok(String(o.out || ""), String(o.err || ""), Number(o.code))
+    }
+  }
+
+  function _serveFailAll(reason) {
+    serveGuard.stop()
+    root._serveUp = false
+    var q = root._serveQueue.splice(0, root._serveQueue.length)
+    root._serveInFlight = root._serveQueue.length
+    for (var i = 0; i < q.length; i++) {
+      if (q[i].err) q[i].err(1, "", reason)
+    }
+  }
+
+  function refreshStatus() {
+    if (statusProcess.running || root._serveInFlight > 0) return
+    statusProcess.command = [root.daemonScriptPath, "status"]
+    statusProcess.running = true
+    statusGuard.restart()
+  }
+
+  function toggleDaemon() {
+    if (!root.isInstalled || root.isBusy) return
+    root._serveEnqueue(["toggle"],
+      function() { root.refreshStatus() },
+      function(code, out, err) {
+        Model.state.error = (err || "toggle failed").trim()
+        root._error = Model.state.error
+        root.refreshStatus()
+      })
+  }
+
+  function setAutostart(on) {
+    if (!root.isInstalled || root.isBusy) return
+    // Optimistic: show the knob throwing to its new state immediately;
+    // the next status poll reconciles it with reality if the action fails.
+    root._enabled = on
+    root._serveEnqueue([on ? "enable" : "disable"],
+      function() { root.refreshStatus() },
+      function(code, out, err) {
+        Model.state.error = (err || "autostart change failed").trim()
+        root._error = Model.state.error
+        root.refreshStatus()
+      })
+  }
+
+  function addConfig() {
+    var input = root._addInput
+    if (input === "" || root.isBusy) return
+    root._cfgMsg = ""
+    root._clearAddOnSuccess = true
+    root._serveEnqueue(["configs", "add", root._addName, input],
+      function(out, err, code) {
+        if (out !== "") root._cfgMsg = out
+        if (root._clearAddOnSuccess) { root._addInput = ""; root._addName = "" }
+        root._clearAddOnSuccess = false
+        console.log("[KryakeN.zapret] configs add: out=" + out + " err=" + err)
+        root.refreshStatus()
+      },
+      function(code, out, err) {
+        root._cfgMsg = (err || out || "config operation failed").trim()
+        root._clearAddOnSuccess = false
+        console.log("[KryakeN.zapret] configs add failed: rc=" + code + " out=" + out + " err=" + err)
+        root.refreshStatus()
+      })
+  }
+
+  function selectConfig(name) {
+    if (root.isBusy) return
+    root._cfgMsg = ""
+    root._clearAddOnSuccess = false
+    root._serveEnqueue(["configs", "select", name],
+      function(out, err, code) {
+        if (out !== "") root._cfgMsg = out
+        root.refreshStatus()
+      },
+      function(code, out, err) {
+        root._cfgMsg = (err || out || "config operation failed").trim()
+        root.refreshStatus()
+      })
+  }
+
+  function removeConfig(name) {
+    if (root.isBusy) return
+    root._cfgMsg = ""
+    root._clearAddOnSuccess = false
+    root._serveEnqueue(["configs", "remove", name],
+      function(out, err, code) {
+        if (out !== "") root._cfgMsg = out
+        root.refreshStatus()
+      },
+      function(code, out, err) {
+        root._cfgMsg = (err || out || "config operation failed").trim()
+        root.refreshStatus()
+      })
+  }
+
+  function open() {
+    root.controller.show()
+    root.refreshStatus()
+  }
+
+  function close() { root.controller.hide() }
+
+  function toggle() {
+    if (root.opened) root.close()
+    else root.open()
+  }
+
+  function switchPanel(direction) {
+    if (root.bar && typeof root.bar.switchPanelFrom === "function") {
+      return root.bar.switchPanelFrom(root.hostWidget || root, direction)
+    }
+    return false
+  }
+
+  Component.onCompleted: root.refreshStatus()
+
+  Timer {
+    id: statusTimer
+    interval: {
+      var sec = parseInt(root.setting("refreshIntervalSec", 5), 10)
+      if (!isFinite(sec) || sec < 1) sec = 5
+      return sec * 1000
+    }
+    running: true
+    repeat: true
+    onTriggered: if (!root.isBusy) root.refreshStatus()
+  }
+
+  property string _statusOutput: ""
+  property string _statusError: ""
+
+  Process {
+    id: statusProcess
+    running: false
+    command: []
+    stdout: StdioCollector {
+      id: statusStdout
+      waitForEnd: true
+      onStreamFinished: root._statusOutput = text
+    }
+    stderr: StdioCollector {
+      id: statusStderr
+      waitForEnd: true
+      onStreamFinished: root._statusError = text
+    }
+    onExited: function(exitCode) {
+      var out = String(statusStdout.text || root._statusOutput || "")
+      var err = String(statusStderr.text || root._statusError || "")
+      statusGuard.stop()
+      if (exitCode === 0 && out.length > 0) {
+        Model.parseStatus(out)
+      } else {
+        Model.parseStatus("")
+        Model.state.error = (err || "status failed").trim()
+      }
+      root._installed = Model.state.installed
+      root._running = Model.state.running
+      root._enabled = Model.state.enabled
+      root._strategy = Model.state.strategy
+      root._config = Model.state.config
+      root._error = Model.state.error
+      root._profiles = Model.state.profiles
+      root._activeProfile = Model.state.profile
+    }
+  }
+
+  // Watchdogs: if a backend process never terminates (e.g. polkit or systemd
+  // stalls during shell load), abort it so polling and toggles recover instead
+  // of freezing the panel state ("Not installed" forever + dead switch).
+  Timer {
+    id: statusGuard
+    interval: 12000
+    repeat: false
+    onTriggered: {
+      if (statusProcess.running) {
+        console.log("[KryakeN.zapret] status watchdog: aborting stuck status process")
+        statusProcess.running = false
+        Model.state.error = "status timeout"
+        root._error = Model.state.error
+      }
+    }
+  }
+
+  Process {
+    id: serveProcess
+    running: false
+    stdinEnabled: true
+    command: []
+    stdout: SplitParser {
+      splitMarker: "\n"
+      onRead: function(data) { root._serveLine(data) }
+    }
+    stderr: StdioCollector { id: serveStderr }
+    onStarted: {
+      console.log("[KryakeN.zapret] serve up")
+      root._serveUp = true
+      root._serveFlush()
+      serveGuard.restart()
+    }
+    onExited: function(exitCode) {
+      root._serveUp = false
+      root._serveFailAll("privilege helper exited (" + exitCode + ")")
+      console.log("[KryakeN.zapret] serve exited: " + exitCode)
+    }
+  }
+
+  Timer {
+    id: serveGuard
+    interval: 120000
+    repeat: false
+    onTriggered: {
+      if (serveProcess.running) {
+        console.log("[KryakeN.zapret] serve watchdog: restarting stuck helper")
+        serveProcess.running = false
+      } else {
+        root._serveFailAll("privilege helper did not start")
+      }
+    }
+  }
+
+  KeyboardPanel {
+    id: panel
+    anchorItem: root.anchorItem
+    owner: root.hostWidget || root
+    bar: root.bar
+    open: root.opened
+    focusTarget: keyCatcher
+    contentWidth: panel.fittedContentWidth(Style.space(340))
+    contentHeight: panel.fittedContentHeight(mainColumn.implicitHeight + Style.space(24))
+
+    PanelKeyCatcher {
+      id: keyCatcher
+      anchors.fill: parent
+      onCloseRequested: root.close()
+      onTabRequested: function(direction) { root.switchPanel(direction) }
+      onTextKey: function(t) {
+        if (t === " " || t === "t" || t === "T") root.toggleDaemon()
+        else if (t === "s" || t === "S") root.refreshStatus()
+      }
+
+      Column {
+        id: mainColumn
+        width: parent.width - Style.space(16)
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Style.space(8)
+        spacing: Style.space(12)
+
+        RowLayout {
+          width: parent.width
+          spacing: Style.space(12)
+
+          Column {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            spacing: Style.space(2)
+
+            Text {
+              text: "Zapret"
+              font.family: root.panelFont
+              font.pixelSize: Style.font.title
+              font.bold: true
+              color: root.foregroundColor
+            }
+
+            Text {
+              text: root.statusMeta.toUpperCase()
+              elide: Text.ElideRight
+              font.family: root.panelFont
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              font.letterSpacing: 1.2
+              color: root.dimColor
+            }
+          }
+
+          ToggleSwitch {
+            checked: root.isRunning
+            busy: root.isBusy
+            accent: root.accentColor
+            foreground: root.foregroundColor
+            onToggled: root.toggleDaemon()
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: root._switchW
+            Layout.preferredHeight: root._switchH
+          }
+        }
+
+        RowLayout {
+          width: parent.width
+          spacing: Style.space(12)
+
+          Column {
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
+            spacing: Style.space(2)
+
+            Text {
+              text: "Start with system"
+              font.family: root.panelFont
+              font.pixelSize: Style.font.title
+              font.bold: true
+              color: root.foregroundColor
+            }
+
+            Text {
+              text: root.isEnabled ? "AUTOSTART" : "NO AUTOSTART"
+              elide: Text.ElideRight
+              font.family: root.panelFont
+              font.pixelSize: Style.font.caption
+              font.bold: true
+              font.letterSpacing: 1.2
+              color: root.dimColor
+            }
+          }
+
+          ToggleSwitch {
+            checked: root.isEnabled
+            busy: root.isBusy
+            interactive: !root.isBusy
+            foreground: root.foregroundColor
+            onToggled: root.setAutostart(!root.isEnabled)
+            Layout.alignment: Qt.AlignVCenter
+            Layout.preferredWidth: root._switchW
+            Layout.preferredHeight: root._switchH
+          }
+        }
+
+        PanelSeparator {
+          width: parent.width
+          foreground: root.foregroundColor
+        }
+
+        Column {
+          width: parent.width
+          spacing: Style.space(4)
+
+          Text {
+            text: "Configs"
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
+            color: root.dimColor
+          }
+
+          Text {
+            width: parent.width
+            visible: root._profiles.length === 0
+            color: root.dimColor
+            text: root._activeProfile !== ""
+              ? "Current: " + root._activeProfile
+              : "No configs yet — the plugin seeds its default config on first use."
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(4)
+            visible: root._profiles.length > 0
+
+            Repeater {
+              model: root._profiles
+              delegate: Rectangle {
+                required property string modelData
+                width: parent.width
+                height: Style.space(26)
+                radius: 2
+                color: modelData === root._activeProfile
+                  ? root.alpha(root.isRunning ? root.accentColor : root.foregroundColor, 0.10)
+                  : root.alpha(root.foregroundColor, 0.04)
+                border.color: modelData === root._activeProfile
+                  ? root.alpha(root.isRunning ? root.accentColor : root.dimColor, 0.5)
+                  : root.alpha(root.dimColor, 0.2)
+                border.width: 1
+
+                RowLayout {
+                  anchors.fill: parent
+                  anchors.leftMargin: Style.space(8)
+                  anchors.rightMargin: Style.space(6)
+                  spacing: Style.space(6)
+
+                  Text {
+                    Layout.fillWidth: true
+                    Layout.alignment: Qt.AlignVCenter
+                    text: modelData + (modelData === root._activeProfile ? "  ●" : "")
+                    elide: Text.ElideRight
+                    font.family: root.panelFont
+                    font.pixelSize: Style.font.body
+                    font.bold: modelData === root._activeProfile
+                    color: root.foregroundColor
+                  }
+
+                  SmallBtn {
+                    label: "Use"
+                    fg: root.foregroundColor
+                    dim: root.dimColor
+                    onTap: function() { root.selectConfig(modelData) }
+                  }
+                  SmallBtn {
+                    label: "×"
+                    fg: root.foregroundColor
+                    dim: root.dimColor
+                    onTap: function() { root.removeConfig(modelData) }
+                  }
+                }
+              }
+            }
+          }
+
+          Rectangle {
+            width: parent.width
+            height: Style.space(26)
+            radius: 2
+            color: root.alpha(root.foregroundColor, 0.05)
+            border.color: root.alpha(root.dimColor, 0.25)
+            border.width: 1
+
+            TextInput {
+              id: configInput
+              text: root._addInput
+              anchors.fill: parent
+              anchors.leftMargin: Style.space(8)
+              anchors.rightMargin: Style.space(8)
+              verticalAlignment: TextInput.AlignVCenter
+              font.family: root.panelFont
+              font.pixelSize: Style.font.body
+              color: root.foregroundColor
+              clip: true
+              onTextChanged: root._addInput = text
+
+              Text {
+                anchors.fill: parent
+                verticalAlignment: Text.AlignVCenter
+                text: "path to a zapret config file"
+                font.family: root.panelFont
+                font.pixelSize: Style.font.body
+                color: root.dimColor
+                visible: parent.text.length === 0
+              }
+            }
+          }
+
+          RowLayout {
+            width: parent.width
+            spacing: Style.space(8)
+
+            Rectangle {
+              Layout.fillWidth: true
+              height: Style.space(28)
+              radius: 2
+              color: root.alpha(root.foregroundColor, 0.05)
+              border.color: root.alpha(root.dimColor, 0.25)
+              border.width: 1
+              Layout.alignment: Qt.AlignVCenter
+
+              TextInput {
+                id: configNameInput
+                text: root._addName
+                anchors.fill: parent
+                anchors.leftMargin: Style.space(8)
+                anchors.rightMargin: Style.space(8)
+                verticalAlignment: TextInput.AlignVCenter
+                font.family: root.panelFont
+                font.pixelSize: Style.font.caption
+                color: root.foregroundColor
+                clip: true
+                onTextChanged: root._addName = text
+                onAccepted: root.addConfig()
+
+                Text {
+                  anchors.fill: parent
+                  verticalAlignment: Text.AlignVCenter
+                  text: "name (optional)"
+                  font.family: root.panelFont
+                  font.pixelSize: Style.font.caption
+                  color: root.dimColor
+                  visible: parent.text.length === 0
+                }
+              }
+            }
+
+            Rectangle {
+              width: 64
+              height: Style.space(28)
+              radius: 2
+              color: root.alpha(root.foregroundColor, 0.08)
+              border.color: root.alpha(root.dimColor, 0.3)
+              border.width: 1
+              Layout.alignment: Qt.AlignVCenter
+
+              MouseArea {
+                anchors.fill: parent
+                enabled: root._addInput.length > 0 && !root.isBusy
+                onClicked: root.addConfig()
+              }
+
+              Text {
+                anchors.centerIn: parent
+                text: "+ Add"
+                font.family: root.panelFont
+                font.pixelSize: Style.font.body
+                font.bold: true
+                color: root.foregroundColor
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            text: root._cfgMsg
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            color: root.accentColor
+            visible: root._cfgMsg !== ""
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            color: root.dimColor
+            text: "Add a path to a zapret config file (e.g. a copy of the stock /etc or /opt/zapret config, or one from a previous setup). \"Use\" applies the config (the store keeps a plain stock config safe as \"default\") and restarts zapret. \"×\" removes a config. On first use the plugin provisions a \"default\" config automatically: it adopts the existing live config, or deploys the bundled stock one if zapret never got one."
+          }
+        }
+
+        PanelSeparator {
+          width: parent.width
+          foreground: root.foregroundColor
+        }
+
+        Text {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          font.family: root.panelFont
+          font.pixelSize: Style.font.caption
+          color: !root.isRunning && root.strategy === "providers off"
+            ? root.alpha(root.accentColor, 0.9)
+            : root.dimColor
+          text: {
+            var parts = []
+            parts.push("Service: " + root.serviceName + ".service")
+            if (root._activeProfile !== "") parts.push("Profile: " + root._activeProfile)
+            if (root.strategy !== "") parts.push("Strategy: " + root.strategy)
+            if (root.configPath !== "") parts.push("Config: " + root.configPath)
+            if (!root.isRunning && root.strategy === "providers off") {
+              parts.push("Hint: all providers are off, toggle has nothing to keep running. Enable NFQWS/TPWS in the chosen config.")
+            }
+            return parts.join("\n")
+          }
+        }
+
+        Rectangle {
+          width: parent.width
+          height: Style.space(34)
+          radius: Style.cornerRadius || 2
+          color: root.alpha(root.foregroundColor, 0.05)
+          border.color: root.alpha(root.dimColor, 0.25)
+          border.width: 1
+          visible: root.lastError !== ""
+
+          Text {
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: Style.space(8)
+            anchors.verticalCenter: parent.verticalCenter
+            text: root.lastError
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            color: "#EF4444"
+            elide: Text.ElideRight
+          }
+        }
+      }
+    }
+  }
+}
