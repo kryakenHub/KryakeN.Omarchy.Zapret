@@ -6,6 +6,13 @@ start/stop, autostart, config profiles and logs.
 This is a user-installed plugin; by itself it does not evade anything — it
 controls whatever `zapret` installation you have on the system.
 
+## Compatibility
+
+Built for the **Omarchy shell** (Hyprland + Quickshell, `qs.Commons` / `qs.Ui`
+APIs, `schemaVersion` 1). It is an `omarchy plugin` bar widget for the
+Omarchy bar and does not run in a standalone Quickshell or on other WMs.
+Developed and validated on Omarchy 4.0.1.
+
 ## Requirements
 
 - Omarchy with the shell, and `quickshell` running.

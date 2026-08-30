@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "poseydon",
   "license": "MIT",
-  "description": "Control the zapret DPI-circumvention daemon from the bar: status, start/stop, autostart, strategy and logs.",
+  "description": "An Omarchy bar widget to control the zapret DPI-circumvention daemon: status, start/stop, autostart, config profiles and logs (Omarchy + Quickshell).",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Zapret",
-    "description": "Toggle the zapret daemon and monitor its status from the bar.",
+    "description": "Toggle the zapret daemon and monitor its status from the Omarchy bar.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right",
