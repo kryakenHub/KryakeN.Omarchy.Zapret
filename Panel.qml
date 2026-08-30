@@ -63,7 +63,16 @@ Panel {
   property string _error: ""
   property var _profiles: []
   property string _activeProfile: ""
-  property string _cfgMsg: ""
+  property string cfgMsg: ""
+  // Статус-сообщение (конфиг-операции) исчезает само через 5 с.
+  Timer {
+    id: cfgMsgDismiss
+    interval: 5000
+    onTriggered: root.cfgMsg = ""
+  }
+  onCfgMsgChanged: {
+    if (root.cfgMsg !== "") cfgMsgDismiss.restart()
+  }
   // TextInput содержимое (ids дочерних полей не резолвятся из root-скоупа —
   // грузим значение в свойство и читаем его).
   property string _addInput: ""
@@ -199,18 +208,18 @@ Panel {
   function addConfig() {
     var input = root._addInput
     if (input === "" || root.isBusy) return
-    root._cfgMsg = ""
+    root.cfgMsg = ""
     root._clearAddOnSuccess = true
     root._serveEnqueue(["configs", "add", root._addName, input],
       function(out, err, code) {
-        if (out !== "") root._cfgMsg = out
+        if (out !== "") root.cfgMsg = out
         if (root._clearAddOnSuccess) { root._addInput = ""; root._addName = "" }
         root._clearAddOnSuccess = false
         console.log("[KryakeN.Omarchy.Zapret] configs add: out=" + out + " err=" + err)
         root.refreshStatus()
       },
       function(code, out, err) {
-        root._cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsg = (err || out || "config operation failed").trim()
         root._clearAddOnSuccess = false
         console.log("[KryakeN.Omarchy.Zapret] configs add failed: rc=" + code + " out=" + out + " err=" + err)
         root.refreshStatus()
@@ -219,30 +228,30 @@ Panel {
 
   function selectConfig(name) {
     if (root.isBusy) return
-    root._cfgMsg = ""
+    root.cfgMsg = ""
     root._clearAddOnSuccess = false
     root._serveEnqueue(["configs", "select", name],
       function(out, err, code) {
-        if (out !== "") root._cfgMsg = out
+        if (out !== "") root.cfgMsg = out
         root.refreshStatus()
       },
       function(code, out, err) {
-        root._cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsg = (err || out || "config operation failed").trim()
         root.refreshStatus()
       })
   }
 
   function removeConfig(name) {
     if (root.isBusy) return
-    root._cfgMsg = ""
+    root.cfgMsg = ""
     root._clearAddOnSuccess = false
     root._serveEnqueue(["configs", "remove", name],
       function(out, err, code) {
-        if (out !== "") root._cfgMsg = out
+        if (out !== "") root.cfgMsg = out
         root.refreshStatus()
       },
       function(code, out, err) {
-        root._cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsg = (err || out || "config operation failed").trim()
         root.refreshStatus()
       })
   }
@@ -664,12 +673,12 @@ Panel {
           Text {
             width: parent.width
             wrapMode: Text.WordWrap
-            text: root._cfgMsg
+            text: root.cfgMsg
             font.family: root.panelFont
             font.pixelSize: Style.font.caption
             font.bold: true
             color: root.accentColor
-            visible: root._cfgMsg !== ""
+            visible: root.cfgMsg !== ""
           }
         }
 
