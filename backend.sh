@@ -194,12 +194,13 @@ find_config() {
 # Where the zapret service sources its config from. A broken managed symlink
 # (e.g. after the profile store was wiped) is skipped so bootstrap re-seeds it.
 configs_live_path() {
-  local p
+  local p t
   p=$(configs_install_config) || return 1
   if [ -L "$p" ]; then
     t=$(readlink -f "$p" 2>/dev/null) || return 1
     case "$t" in
-      "$CONFIGS_PROFILES"*) [ -e "$t" ] || return 1 ;;
+      "$CONFIGS_PROFILES"*) : ;;
+      *) return 1 ;;
     esac
   fi
   printf '%s\n' "$p"
