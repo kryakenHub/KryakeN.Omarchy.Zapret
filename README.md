@@ -121,3 +121,9 @@ add/select/remove/migrate) run through a single persistent helper process:
 | `ZAPRET_DEFAULT_CONFIG` | bundled `default.config` | stock config deployed when none exists |
 | `ZAPRET_PRIV` | `sudo`/`pkexec` | privilege wrapper (TTY vs panel) |
 | `ZAPRET_FAKE_ROOT` | – | testing: skip self-elevation, run fs ops as the caller |
+
+## AI assistance
+
+This project was developed with AI assistance (vibecoding — pair-programming
+with an LLM). Review the code and test it before relying on it for anything
+sensitive.
