@@ -53,6 +53,24 @@ Developed and validated on Omarchy 4.0.1.
    sudo backend.sh configs migrate
    ```
 
+Alternatively, install straight from Git:
+
+```sh
+omarchy plugin add https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git --enable
+```
+
+## Remove
+
+Remove the widget from `shell.json`, then:
+
+```sh
+omarchy plugin remove KryakeN.Omarchy.Zapret
+```
+
+The plugin never writes inside the plugin folder — runtime data lives in
+`/etc/zapret-configs` and the `zapret` unit, and those are left untouched so
+the daemon keeps working after the plugin is gone.
+
 ## Config profiles
 
 Profiles are complete zapret `config` files stored under
