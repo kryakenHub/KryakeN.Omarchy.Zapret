@@ -38,22 +38,14 @@ bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
 
 ## Install
 
-1. Clone the repo and put it in your plugins directory under the plugin id (`kryaken.omarchy.zapret`):
+1. Install straight from Git (this places the plugin under its id
+   `kryaken.omarchy.zapret` and enables it for the shell):
 
    ```sh
-   git clone https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git
-   cp -r KryakeN.Omarchy.Zapret ~/.config/omarchy/plugins/kryaken.omarchy.zapret
-   omarchy plugin validate "~/.config/omarchy/plugins/kryaken.omarchy.zapret"
+   omarchy plugin add https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git --enable
    ```
 
-2. Add the widget to the bar in `~/.config/omarchy/shell.json`, e.g. in
-   `bar.layout.right`:
-
-   ```jsonc
-   { "id": "kryaken.omarchy.zapret" }
-   ```
-
-3. Restart the shell and open the Zapret panel. On first use the plugin
+2. Restart the shell and open the Zapret panel. On first use the plugin
    provisions a `default` config profile automatically: it adopts your current
    live zapret config if one exists, otherwise it deploys the bundled stock
    config (`default.config`). The first config you add later becomes active
@@ -64,10 +56,19 @@ bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
    sudo backend.sh configs migrate
    ```
 
-Alternatively, install straight from Git:
+Alternatively, install manually:
 
 ```sh
-omarchy plugin add https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git --enable
+git clone https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git
+cp -r KryakeN.Omarchy.Zapret ~/.config/omarchy/plugins/kryaken.omarchy.zapret
+omarchy plugin validate "~/.config/omarchy/plugins/kryaken.omarchy.zapret"
+```
+
+Then add the widget to the bar in `~/.config/omarchy/shell.json`, e.g. in
+`bar.layout.right`:
+
+```jsonc
+{ "id": "kryaken.omarchy.zapret" }
 ```
 
 ## Remove
