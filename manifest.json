@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "kryaken.omarchy.zapret",
   "name": "Zapret",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "poseydon",
   "license": "MIT",
   "description": "An Omarchy bar widget to control the zapret DPI-circumvention daemon: status, start/stop, autostart, config profiles and logs (Omarchy + Quickshell).",
