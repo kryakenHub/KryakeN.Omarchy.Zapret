@@ -389,15 +389,13 @@ bootstrap() {
     mkdir -p "$(dirname "$p")" 2>/dev/null
     ln -s "$CONFIGS_PROFILES/default.config" "$p" 2>/dev/null
   done
-  maybe_restart
-  # This is a genuine first provision (the store was empty a moment ago), so
-  # bring the daemon up now and leave it running — the panel should work out of
-  # the box instead of showing a non-functional "off" until the user manually
-  # toggles or selects a config. Autostart (enable) stays a separate, explicit
-  # user choice; here we only start the unit for the current session.
-  if [ "$(id -u)" = 0 ] && unit_known && ! unit_active; then
-    sysctl start "$SERVICE" 2>/dev/null
-  fi
+  # Provisioning is complete: config profiles exist, the active marker is set and
+  # the live symlink points at a real file. Do NOT start the daemon here — the
+  # panel's very next action after provisioning is usually a "toggle", and if we
+  # had already brought the unit up, that toggle would see it active and turn it
+  # straight back off, making the first switch appear to do nothing. Leaving the
+  # unit off means the first toggle cleanly starts it, so it turns on on the
+  # first click. (Autostart stays a separate, explicit user choice.)
   return 0
 }
 
