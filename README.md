@@ -105,6 +105,10 @@ install.
 - The same provisioning also runs on every `start`/`restart`/`toggle`, so a
   wiped profile store self-heals on the very next toggle without needing a
   shell restart.
+- Starting/toggling also re-applies the active profile (guarantees the
+  `/opt/zapret/config` symlink points at the profile) before launching, so a
+  missing or broken symlink self-heals on the first toggle instead of the
+  daemon failing to start.
 - The **first added** profile is activated automatically.
 - If applying a profile (select/migrate) would replace a plain, unmanaged live
   config, its bytes are preserved as the `default` profile first, so the stock

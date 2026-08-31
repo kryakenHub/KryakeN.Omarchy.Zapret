@@ -311,6 +311,20 @@ maybe_restart() {
   [ "$(id -u)" = 0 ] && unit_active && sysctl restart "$SERVICE" 2>/dev/null
 }
 
+# Root: guarantee the live config symlink points at the active profile before
+# the daemon starts. bootstrap() only (re)seeds the store, and returns early
+# once any profile exists — so a present-but-unapplied profile (missing or
+# broken /opt/zapret/config symlink) would otherwise make start/toggle launch
+# zapret with no valid config and the unit would fail. Applying the active
+# profile here fixes exactly that case, and is a no-op when the link is fine.
+apply_active() {
+  a=""
+  configs_active_name >/dev/null 2>&1 && a=$(configs_active_name)
+  [ -n "$a" ] || return 0
+  deploy_live "$a" 2>/dev/null
+  return 0
+}
+
 # Root: full migration — preserve a plain live config as "default" and apply it.
 configs_migrate() {
   root_setup || { echo "cannot initialize config store" >&2; return 1; }
@@ -578,10 +592,10 @@ case "$cmd" in
   status) status_json ;;
   serve) serve ;;
   installed) unit_known && echo yes || echo no ;;
-  start) bootstrap; action start "$SERVICE" ;;
+  start) bootstrap; apply_active; action start "$SERVICE" ;;
   stop) action stop "$SERVICE" ;;
-  restart) bootstrap; action restart "$SERVICE" ;;
-  toggle) if unit_active; then action stop "$SERVICE"; else bootstrap; action start "$SERVICE"; fi ;;
+  restart) bootstrap; apply_active; action restart "$SERVICE" ;;
+  toggle) if unit_active; then action stop "$SERVICE"; else bootstrap; apply_active; action start "$SERVICE"; fi ;;
   enable) action enable "$SERVICE" ;;
   disable) action disable "$SERVICE" ;;
   doctor) doctor ;;
