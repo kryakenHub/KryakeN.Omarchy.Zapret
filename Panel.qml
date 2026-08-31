@@ -19,16 +19,34 @@ Panel {
     property color fg: Color.foreground
     property color dim: Qt.darker(fg, 1.4)
 
-    width: Math.max(24, label.length * 7 + 12)
+    property string _flashLabel: ""
+    property bool _flashing: false
+    property int _flashMs: 1100
+
+    function flash(text) {
+      _flashLabel = text
+      _flashing = true
+      flashTimer.restart()
+    }
+
+    Timer {
+      id: flashTimer
+      interval: _flashMs
+      repeat: false
+      onTriggered: { _flashing = false; _flashLabel = "" }
+    }
+
+    width: Math.max(24, textItem.implicitWidth + 12)
     height: Style.space(20)
     radius: 2
-    color: Qt.rgba(fg.r, fg.g, fg.b, 0.06)
-    border.color: Qt.rgba(dim.r, dim.g, dim.b, 0.3)
+    color: _flashing ? Qt.rgba(fg.r, fg.g, fg.b, 0.22) : Qt.rgba(fg.r, fg.g, fg.b, 0.06)
+    border.color: _flashing ? fg : Qt.rgba(dim.r, dim.g, dim.b, 0.3)
     border.width: 1
 
     Text {
+      id: textItem
       anchors.centerIn: parent
-      text: parent.label
+      text: parent._flashing ? parent._flashLabel : parent.label
       color: parent.fg
       font.family: Style.font.family
       font.pixelSize: Style.font.caption
@@ -503,10 +521,11 @@ Panel {
               }
 
               SmallBtn {
+                id: copyDepBtn
                 label: "Copy"
                 fg: root.foregroundColor
                 dim: root.dimColor
-                onTap: function() { Quickshell.clipboardText = modelData.h }
+                onTap: function() { Quickshell.clipboardText = modelData.h; copyDepBtn.flash("Copied ✓") }
               }
             }
           }
@@ -526,17 +545,19 @@ Panel {
             }
 
             SmallBtn {
+              id: copyCmdBtn
               label: "Copy"
               fg: root.foregroundColor
               dim: root.dimColor
-              onTap: function() { Quickshell.clipboardText = root.doctorCommand }
+              onTap: function() { Quickshell.clipboardText = root.doctorCommand; copyCmdBtn.flash("Copied ✓") }
             }
 
             SmallBtn {
+              id: checkBtn
               label: "Check"
               fg: root.foregroundColor
               dim: root.dimColor
-              onTap: function() { root.refreshStatus() }
+              onTap: function() { root.refreshStatus(); checkBtn.flash("Checked ✓") }
             }
           }
 

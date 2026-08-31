@@ -22,7 +22,8 @@ Developed and validated on Omarchy 4.0.1.
 - Omarchy with the shell, and `quickshell` running.
 - A working `zapret` install with a `zapret` systemd unit and its config
   sourced from one of `/etc/zapret/config`, `/usr/local/etc/zapret/config` or
-  `/opt/zapret/config` (override with `ZAPRET_CONFIG`).
+  `/opt/zapret/config` (override with `ZAPRET_CONFIG`). On Arch with an AUR
+  helper this is `yay -S zapret`.
 - Root (via `sudo` on a TTY or `pkexec` from the panel) to manage the unit and
   the config profile store under `/etc/zapret-configs`.
 

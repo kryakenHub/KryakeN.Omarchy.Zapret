@@ -80,8 +80,8 @@ os_is() {
 install_hint() {
   case "${1:-}" in
     zapret)
-      if command -v paru >/dev/null 2>&1; then printf '%s\n' "sudo paru -S zapret"; return 0; fi
-      if command -v yay >/dev/null 2>&1; then printf '%s\n' "sudo yay -S zapret"; return 0; fi
+      if command -v paru >/dev/null 2>&1; then printf '%s\n' "paru -S zapret"; return 0; fi
+      if command -v yay >/dev/null 2>&1; then printf '%s\n' "yay -S zapret"; return 0; fi
       if os_is arch; then
         printf '%s\n' 'git clone https://aur.archlinux.org/zapret.git && cd zapret && makepkg -si'
         return 0
