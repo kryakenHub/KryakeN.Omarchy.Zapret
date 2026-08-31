@@ -1,4 +1,4 @@
-# KryakeN.Omarchy.Zapret — Zapret DPI-circumvention controls
+# kryaken.omarchy.zapret — Zapret DPI-circumvention controls
 
 Omarchy bar widget + CLI to manage the systemd-managed `zapret` daemon: status,
 start/stop, autostart, config profiles and logs.
@@ -28,18 +28,19 @@ Developed and validated on Omarchy 4.0.1.
 
 ## Install
 
-1. Copy the `KryakeN.Omarchy.Zapret` folder to your plugins directory and register it:
+1. Clone the repo and put it in your plugins directory under the plugin id (`kryaken.omarchy.zapret`):
 
    ```sh
-   cp -r KryakeN.Omarchy.Zapret ~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret
-   omarchy plugin validate "~/.config/omarchy/plugins/KryakeN.Omarchy.Zapret"
+   git clone https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git
+   cp -r KryakeN.Omarchy.Zapret ~/.config/omarchy/plugins/kryaken.omarchy.zapret
+   omarchy plugin validate "~/.config/omarchy/plugins/kryaken.omarchy.zapret"
    ```
 
 2. Add the widget to the bar in `~/.config/omarchy/shell.json`, e.g. in
    `bar.layout.right`:
 
    ```jsonc
-   { "id": "KryakeN.Omarchy.Zapret" }
+   { "id": "kryaken.omarchy.zapret" }
    ```
 
 3. Restart the shell and open the Zapret panel. On first use the plugin
@@ -64,7 +65,7 @@ omarchy plugin add https://github.com/kryakenHub/KryakeN.Omarchy.Zapret.git --en
 Remove the widget from `shell.json`, then:
 
 ```sh
-omarchy plugin remove KryakeN.Omarchy.Zapret
+omarchy plugin remove kryaken.omarchy.zapret
 ```
 
 The plugin never writes inside the plugin folder — runtime data lives in
@@ -111,7 +112,7 @@ Privileged commands (unit control, profile store) use `sudo` from a TTY and
 
 All privileged operations performed from the panel (toggle, autostart, config
 add/select/remove/migrate) run through a single persistent helper process:
-`pkexec backend.sh serve`. `KryakeN.Omarchy.Vless` uses exactly the same scheme.
+`pkexec backend.sh serve`. `kryaken.omarchy.vless` uses exactly the same scheme.
 
 - The helper is **not** started at boot — only on your first privileged action
   in a shell session. Starting it is the only point where a password is asked
@@ -126,7 +127,7 @@ add/select/remove/migrate) run through a single persistent helper process:
 - Handling it by hand:
 
 ```sh
-   printf '%s\n' '{"id":1,"args":["toggle"]}' | pkexec "$HOME/.config/omarchy/plugins/KryakeN.Omarchy.Zapret/backend.sh" serve
+   printf '%s\n' '{"id":1,"args":["toggle"]}' | pkexec "$HOME/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh" serve
    ```
 
 ## Environment

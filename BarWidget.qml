@@ -4,7 +4,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "KryakeN.Omarchy.Zapret"
+  moduleName: "kryaken.omarchy.zapret"
 
   readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
   readonly property bool running: panelLoader.item ? panelLoader.item.isRunning === true : false
