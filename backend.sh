@@ -72,6 +72,84 @@ unit_known() {
 unit_active() { [ "$(sysctl is-active "$SERVICE")" = "active" ]; }
 unit_enabled() { [ "$(sysctl is-enabled "$SERVICE")" = "enabled" ]; }
 
+os_is() {
+  sed -n 's/^\(ID\|ID_LIKE\)=//p' /etc/os-release 2>/dev/null | tr -d '"' | tr ' ' '\n' | grep -qi "^$1$"
+}
+
+# Copy-pasteable install hint for a missing dependency.
+install_hint() {
+  case "${1:-}" in
+    zapret)
+      if command -v paru >/dev/null 2>&1; then printf '%s\n' "sudo paru -S zapret"; return 0; fi
+      if command -v yay >/dev/null 2>&1; then printf '%s\n' "sudo yay -S zapret"; return 0; fi
+      if os_is arch; then
+        printf '%s\n' 'git clone https://aur.archlinux.org/zapret.git && cd zapret && makepkg -si'
+        return 0
+      fi
+      printf '%s\n' "see https://github.com/bol-van/zapret for install instructions"
+      ;;
+    python)
+      if os_is arch; then printf '%s\n' "sudo pacman -S python"; else printf '%s\n' "install python3 (https://www.python.org)"; fi
+      ;;
+    *) printf '%s\n' "" ;;
+  esac
+}
+
+# Read-only dependency report (included in `status` so the panel can offer
+# one-click setup against missing packages; no privilege needed).
+deps_json() {
+  sys_ok=false
+  z_ok=false; z_h=""
+  py_ok=false; py_h=""
+  if command -v systemctl >/dev/null 2>&1; then
+    sys_ok=true
+    if unit_known; then z_ok=true; else z_h=$(install_hint zapret); fi
+  else
+    z_h=$(install_hint zapret)
+  fi
+  if command -v python3 >/dev/null 2>&1; then py_ok=true; else py_h=$(install_hint python); fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$sys_ok" "$z_ok" "$z_h" "$py_ok" "$py_h" <<'PYEOF'
+import json, sys
+def b(s): return s == "true"
+sys_ok, z_ok, z_h, py_ok, py_h = sys.argv[1:]
+deps = [
+    {"n": "systemd", "ok": b(sys_ok), "h": "" if b(sys_ok) else "install systemd"},
+    {"n": "zapret.service", "ok": b(z_ok), "h": z_h if not b(z_ok) else ""},
+    {"n": "python3", "ok": b(py_ok), "h": py_h if not b(py_ok) else ""},
+]
+print(json.dumps(deps))
+PYEOF
+  else
+    printf '[{"n":"systemd","ok":%s,"h":""},{"n":"zapret.service","ok":%s,"h":"%s"},{"n":"python3","ok":false,"h":"install python3"}]\n' \
+      "$sys_ok" "$z_ok" "$(printf '%s' "$z_h" | tr -d '"')"
+  fi
+}
+
+# Terminal-friendly setup validation (exit 0 when everything is in place).
+doctor() {
+  rc=0
+  if command -v systemctl >/dev/null 2>&1; then
+    if unit_known; then
+      printf '%s\n' "ok     zapret.service"
+    else
+      printf '%s\n' "missing zapret.service — $(install_hint zapret)"
+      rc=1
+    fi
+  else
+    printf '%s\n' "missing systemd"
+    rc=1
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' "ok     python3"
+  else
+    printf '%s\n' "missing python3 — $(install_hint python)"
+    rc=1
+  fi
+  [ "$rc" -eq 0 ] && printf '%s\n' "ok     all dependencies present"
+  return "$rc"
+}
+
 find_config() {
   if [ -n "$CONFIG" ]; then
     [ -r "$CONFIG" ] && { printf '%s\n' "$CONFIG"; return 0; }
@@ -242,12 +320,15 @@ bootstrap() {
 }
 
 status_json() {
+  deps_s=$(deps_json)
   command -v systemctl >/dev/null 2>&1 || {
-    printf '%s\n' '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[]}'
+    printf '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
+      "$deps_s"
     return 0
   }
   if ! unit_known; then
-    printf '%s\n' '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[]}'
+    printf '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
+      "$deps_s"
     return 0
   fi
   active=false
@@ -269,8 +350,8 @@ status_json() {
   fi
   aprof=$(configs_active_from_live)
   plist=$(config_profiles_list | json_array)
-  printf '{"installed":true,"active":%s,"enabled":%s,"config":%s,"strategy":%s,"profile":%s,"profiles":%s}\n' \
-    "$active" "$enabled" "$config_line" "$strategy" "$aprof" "$plist"
+  printf '{"installed":true,"active":%s,"enabled":%s,"config":%s,"strategy":%s,"profile":%s,"profiles":%s,"deps":%s}\n' \
+    "$active" "$enabled" "$config_line" "$strategy" "$aprof" "$plist" "$deps_s"
 }
 
 action() { run "$@"; }
@@ -339,7 +420,7 @@ needs_root() {
 
 usage() {
   cat <<EOF
-usage: $0 {status|installed|start|stop|restart|toggle|enable|disable|logs [n]}
+usage: $0 {status|installed|start|stop|restart|toggle|enable|disable|doctor|logs [n]}
        $0 configs {list|add [<name>] <path-to-config>|select <name>|remove <name>|migrate}
        $0 serve
 EOF
@@ -398,6 +479,7 @@ case "$cmd" in
   toggle) if unit_active; then action stop "$SERVICE"; else action start "$SERVICE"; fi ;;
   enable) action enable "$SERVICE" ;;
   disable) action disable "$SERVICE" ;;
+  doctor) doctor ;;
   configs)
     sub="${2:-list}"
     case "$sub" in

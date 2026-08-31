@@ -8,7 +8,8 @@ var state = {
   strategy: "",
   profile: "",
   profiles: [],
-  error: ""
+  error: "",
+  deps: []
 }
 
 function reset() {
@@ -20,6 +21,7 @@ function reset() {
   state.profile = ""
   state.profiles = []
   state.error = ""
+  state.deps = []
 }
 
 function parseStatus(raw) {
@@ -38,6 +40,9 @@ function parseStatus(raw) {
     state.profile = String(o.profile || "")
     state.profiles = Array.isArray(o.profiles) ? o.profiles : []
     state.error = String(o.error || "")
+    state.deps = Array.isArray(o.deps) ? o.deps.map(function(d) {
+      return { n: String(d.n || ""), ok: !!d.ok, h: String(d.h || "") }
+    }) : []
     return true
   } catch (e) {
     reset()

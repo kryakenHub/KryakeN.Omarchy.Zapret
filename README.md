@@ -26,6 +26,16 @@ Developed and validated on Omarchy 4.0.1.
 - Root (via `sudo` on a TTY or `pkexec` from the panel) to manage the unit and
   the config profile store under `/etc/zapret-configs`.
 
+### Validate the setup
+
+The panel shows a "REQUIRED SETUP" card with a copy-ready install command
+whenever a dependency is missing. You can also verify dependencies from a
+terminal:
+
+```sh
+bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
+```
+
 ## Install
 
 1. Clone the repo and put it in your plugins directory under the plugin id (`kryaken.omarchy.zapret`):

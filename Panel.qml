@@ -63,6 +63,7 @@ Panel {
   property string _error: ""
   property var _profiles: []
   property string _activeProfile: ""
+  property var _deps: []
   property string cfgMsg: ""
   // Статус-сообщение (конфиг-операции) исчезает само через 5 с.
   Timer {
@@ -102,6 +103,11 @@ Panel {
   readonly property string panelFont: root.bar ? root.bar.fontFamily : Style.font.family
   readonly property string daemonScriptPath:
     Qt.resolvedUrl("backend.sh").toString().replace(/^file:\/\//, "")
+
+  // Copy-pasteable commands for onboarding (shown while a dependency is
+  // missing): install a package, or re-validate the whole setup in a terminal.
+  readonly property string doctorCommand:
+    "bash ~/.config/omarchy/plugins/" + root.moduleName + "/backend.sh doctor"
 
   readonly property string statusMeta:
     !root.isInstalled
@@ -324,6 +330,11 @@ Panel {
       root._error = Model.state.error
       root._profiles = Model.state.profiles
       root._activeProfile = Model.state.profile
+      var missing = []
+      for (var di = 0; di < Model.state.deps.length; di++) {
+        if (!Model.state.deps[di].ok) missing.push(Model.state.deps[di])
+      }
+      root._deps = missing
     }
   }
 
@@ -446,6 +457,91 @@ Panel {
             Layout.alignment: Qt.AlignVCenter
             Layout.preferredWidth: root._switchW
             Layout.preferredHeight: root._switchH
+          }
+        }
+
+        Column {
+          id: setupCol
+          width: parent.width
+          spacing: Style.space(4)
+          visible: root._deps.length > 0
+
+          Text {
+            text: "REQUIRED SETUP"
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            font.bold: true
+            font.letterSpacing: 1.2
+            color: root.dimColor
+          }
+
+          Text {
+            width: parent.width
+            wrapMode: Text.WordWrap
+            font.family: root.panelFont
+            font.pixelSize: Style.font.caption
+            color: root.dimColor
+            text: "Install the missing dependencies, then copy and run the validation command (or press Check)."
+          }
+
+          Repeater {
+            model: root._deps
+            delegate: RowLayout {
+              required property var modelData
+              width: parent.width
+              spacing: Style.space(6)
+
+              Text {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignVCenter
+                text: "• " + modelData.n
+                elide: Text.ElideRight
+                font.family: root.panelFont
+                font.pixelSize: Style.font.body
+                color: root.foregroundColor
+              }
+
+              SmallBtn {
+                label: "Copy"
+                fg: root.foregroundColor
+                dim: root.dimColor
+                onTap: function() { Quickshell.clipboardText = modelData.h }
+              }
+            }
+          }
+
+          RowLayout {
+            width: parent.width
+            spacing: Style.space(6)
+
+            Text {
+              Layout.fillWidth: true
+              Layout.alignment: Qt.AlignVCenter
+              text: "validate: " + root.doctorCommand
+              elide: Text.ElideRight
+              font.family: root.panelFont
+              font.pixelSize: Style.font.caption
+              color: root.dimColor
+            }
+
+            SmallBtn {
+              label: "Copy"
+              fg: root.foregroundColor
+              dim: root.dimColor
+              onTap: function() { Quickshell.clipboardText = root.doctorCommand }
+            }
+
+            SmallBtn {
+              label: "Check"
+              fg: root.foregroundColor
+              dim: root.dimColor
+              onTap: function() { root.refreshStatus() }
+            }
+          }
+
+          PanelSeparator {
+            width: parent.width
+            foreground: root.foregroundColor
           }
         }
 
