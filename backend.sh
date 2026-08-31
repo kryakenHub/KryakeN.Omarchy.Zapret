@@ -346,8 +346,12 @@ bootstrap() {
   root_setup || return 1
   live=""
   seeded_from_bundle=false
+  # Resolve the single live config path (from ExecStart) even when the file is
+  # not there yet, so the symlink is provisioned below and the "default" profile
+  # is actually applied on the very first run instead of silently staying
+  # unselected. The adoption branch below still guards on -f/-L, so a missing
+  # or already-managed live config just falls through to bundling.
   if configs_live_path >/dev/null 2>&1; then live=$(configs_live_path); fi
-  [ -e "${live:-/nonexistent}" ] || live=""
   if [ -n "$live" ] && [ -f "$live" ] && [ ! -L "$live" ] && daemons_enabled "$live"; then
     # Existing, working, plain-file config: adopt it untouched.
     cp "$live" "$CONFIGS_PROFILES/default.config" 2>/dev/null || return 1
@@ -418,6 +422,15 @@ status_json() {
     fi
   fi
   aprof=$(configs_active_from_live)
+  # The live config may not be a managed symlink yet (e.g. the service is not
+  # running, or the store was provisioned before zapret created its config).
+  # In that case the store's `.active` marker is the best statement of intent
+  # — report it as the active profile so the freshly provisioned "default"
+  # shows up as selected instead of needing a manual "Use".
+  if [ "$aprof" = "null" ] && configs_active_name >/dev/null 2>&1; then
+    a=$(configs_active_name)
+    [ -f "$CONFIGS_PROFILES/$a.config" ] && aprof=$(printf '"%s"' "$a")
+  fi
   config_file="null"
   if [ -n "$aprof" ] && [ "$aprof" != "null" ]; then
     a=$(printf '%s\n' "$aprof" | tr -d '"')

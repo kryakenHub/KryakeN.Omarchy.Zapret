@@ -47,11 +47,13 @@ bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
    ```
 
 2. Restart the shell and open the Zapret panel. On first use the plugin
-   provisions a `default` config profile automatically: it adopts your current
-   live zapret config if one exists and actually enables a daemon, otherwise it
-   deploys the bundled working config (`default.config`, nfqws on 80/443). The
-   first config you add later becomes active automatically. To import the
-   current stock zapret config as the `default` profile manually, run:
+   provisions a `default` config profile automatically and makes it the active
+   one: it adopts your current live zapret config if one exists and actually
+   enables a daemon, otherwise it deploys the bundled working config
+   (`default.config`, nfqws on 80/443) and points the live config at it — no
+   manual "Use" needed. The first config you add later becomes active
+   automatically too. To import the current stock zapret config as the `default`
+   profile manually, run:
 
    ```sh
    sudo backend.sh configs migrate
@@ -94,9 +96,10 @@ symlink and restarts the unit, without touching the rest of your zapret
 install.
 
 - On the first privileged `serve` session with an empty store, a `default`
-  profile is provisioned automatically: an existing plain live config is
-  adopted, otherwise `default.config` (bundled next to `backend.sh`, overridable
-  with `ZAPRET_DEFAULT_CONFIG`) is deployed. Existing setups are never touched.
+  profile is provisioned and activated automatically: an existing plain live
+  config is adopted, otherwise `default.config` (bundled next to `backend.sh`,
+  overridable with `ZAPRET_DEFAULT_CONFIG`) is deployed and the live config is
+  pointed at it. Existing setups are never touched.
 - The **first added** profile is activated automatically.
 - If applying a profile (select/migrate) would replace a plain, unmanaged live
   config, its bytes are preserved as the `default` profile first, so the stock
