@@ -4,24 +4,25 @@
 # Environment:
 #   ZAPRET_SERVICE      systemd unit controlling zapret (default: zapret)
 #   ZAPRET_CONFIG       force the live config path (default: auto-detect)
-#   ZAPRET_CONFIGS_DIR  profile store (default: /opt/zapret/configs)
+#   ZAPRET_CONFIGS_DIR  profile store (default: /etc/zapret/configs)
 #   ZAPRET_PRIV         pkexec | sudo (default: sudo when run from a TTY,
 #                       otherwise pkexec - i.e. when launched from the shell panel)
 #   ZAPRET_FAKE_ROOT    skip self-elevation + run fs ops as the calling user
 #                       (testing/containers)
 #
 # Config profiles: every profile is a complete zapret `config` file stored as
-# <name>.config in /opt/zapret/configs (the profile store). zapret itself only
-# ever reads /opt/zapret/config, so the single active profile is symlinked
-# over that path; switching profiles just re-points the symlink and restarts
-# the unit. Adding a profile copies the file into the store; the first added
-# profile is activated automatically. A still-plain live config is preserved as
-# the "default" profile only when it is about to be replaced (select/migrate),
-# so the stock setup stays recoverable. On the first `serve` session with an
-# empty store, a default profile is provisioned automatically: the existing
-# live config is adopted if there is one, otherwise the bundled stock config
-# (default.config next to this script, overridable with $ZAPRET_DEFAULT_CONFIG)
-# is deployed.
+# <name>.config in /etc/zapret/configs (the profile store, under the plugin's
+# own /etc/zapret tree — symmetric with the vless plugin's /etc/xray-vpn).
+# zapret itself only ever reads its install config (/opt/zapret/config), so the
+# single active profile is symlinked over that path; switching profiles just
+# re-points the symlink and restarts the unit. Adding a profile copies the file
+# into the store; the first added profile is activated automatically. A
+# still-plain live config is preserved as the "default" profile only when it is
+# about to be replaced (select/migrate), so the stock setup stays recoverable.
+# On the first `serve` session with an empty store, a default profile is
+# provisioned automatically: the existing live config is adopted if there is
+# one, otherwise the bundled stock config (default.config next to this script,
+# overridable with $ZAPRET_DEFAULT_CONFIG) is deployed.
 #
 # Commands:
 #   status [unit]  JSON: installed/active/enabled/config/strategy/profile/profiles
@@ -34,10 +35,11 @@ set -u
 
 SERVICE="${ZAPRET_SERVICE:-zapret}"
 CONFIG="${ZAPRET_CONFIG:-}"
-# Profile store lives next to the zapret install (/opt/zapret/configs):
-# every profile is a <name>.config file here, and the single active one is
-# symlinked over /opt/zapret/config (what zapret.service actually sources).
-CONFIGS_DIR="${ZAPRET_CONFIGS_DIR:-/opt/zapret/configs}"
+# Profile store lives under the plugin's own /etc/zapret tree (mirroring the
+# vless plugin's /etc/xray-vpn): every profile is a <name>.config file here,
+# and the single active one is symlinked over the install's config
+# (/opt/zapret/config — what the zapret.service actually sources).
+CONFIGS_DIR="${ZAPRET_CONFIGS_DIR:-/etc/zapret/configs}"
 CONFIGS_PROFILES="$CONFIGS_DIR"
 CONFIGS_ACTIVE="$CONFIGS_DIR/.active"
 SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
@@ -500,6 +502,15 @@ cmd="${1:-status}"
 
 needs_root() {
   case "$cmd" in
+    start|restart|toggle)
+      # Run the whole command as root (not just the systemctl call): these
+      # first re-provision a default profile via bootstrap when the store is
+      # empty, so a wiped store self-heals on the next toggle — same as the
+      # vless plugin's ensure_install in its toggle.
+      am_root || {
+        if [ -t 0 ]; then exec "${ZAPRET_PRIV:-sudo}" "$0" "$@"; else exec "${ZAPRET_PRIV:-pkexec}" "$0" "$@"; fi
+      }
+      ;;
     configs)
       case "${2:-list}" in
         add|select|remove|migrate)
@@ -567,10 +578,10 @@ case "$cmd" in
   status) status_json ;;
   serve) serve ;;
   installed) unit_known && echo yes || echo no ;;
-  start) action start "$SERVICE" ;;
+  start) bootstrap; action start "$SERVICE" ;;
   stop) action stop "$SERVICE" ;;
-  restart) action restart "$SERVICE" ;;
-  toggle) if unit_active; then action stop "$SERVICE"; else action start "$SERVICE"; fi ;;
+  restart) bootstrap; action restart "$SERVICE" ;;
+  toggle) if unit_active; then action stop "$SERVICE"; else bootstrap; action start "$SERVICE"; fi ;;
   enable) action enable "$SERVICE" ;;
   disable) action disable "$SERVICE" ;;
   doctor) doctor ;;
