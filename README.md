@@ -125,9 +125,9 @@ add/select/remove/migrate) run through a single persistent helper process:
   a password as usual.
 - Handling it by hand:
 
-  ```sh
-  printf '%s\n' '{"id":1,"args":["toggle"]}' | pkexec backend.sh serve
-  ```
+```sh
+   printf '%s\n' '{"id":1,"args":["toggle"]}' | pkexec "$HOME/.config/omarchy/plugins/KryakeN.Omarchy.Zapret/backend.sh" serve
+   ```
 
 ## Environment
 
