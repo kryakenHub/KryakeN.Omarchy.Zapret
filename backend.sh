@@ -4,23 +4,24 @@
 # Environment:
 #   ZAPRET_SERVICE      systemd unit controlling zapret (default: zapret)
 #   ZAPRET_CONFIG       force the live config path (default: auto-detect)
-#   ZAPRET_CONFIGS_DIR  profile store (default: /etc/zapret-configs)
+#   ZAPRET_CONFIGS_DIR  profile store (default: /opt/zapret/configs)
 #   ZAPRET_PRIV         pkexec | sudo (default: sudo when run from a TTY,
 #                       otherwise pkexec - i.e. when launched from the shell panel)
 #   ZAPRET_FAKE_ROOT    skip self-elevation + run fs ops as the calling user
 #                       (testing/containers)
 #
-# Config profiles: each profile is a complete zapret `config` file stored
-# under $ZAPRET_CONFIGS_DIR/profiles/<name>.config. The active profile is
-# symlinked over the live config path that zapret sources at start (the path
-# from $ZAPRET_CONFIG, else the first existing candidate below). Adding a
-# profile never creates anything else; the first added profile is activated
-# automatically. A still-plain live config is preserved as the "default"
-# profile only when it is about to be replaced (select/migrate), so the stock
-# setup stays recoverable. On the first `serve` session with an empty store, a
-# default profile is provisioned automatically: the existing live config is
-# adopted if there is one, otherwise the bundled stock config (default.config
-# next to this script, overridable with $ZAPRET_DEFAULT_CONFIG) is deployed.
+# Config profiles: every profile is a complete zapret `config` file stored as
+# <name>.config in /opt/zapret/configs (the profile store). zapret itself only
+# ever reads /opt/zapret/config, so the single active profile is symlinked
+# over that path; switching profiles just re-points the symlink and restarts
+# the unit. Adding a profile copies the file into the store; the first added
+# profile is activated automatically. A still-plain live config is preserved as
+# the "default" profile only when it is about to be replaced (select/migrate),
+# so the stock setup stays recoverable. On the first `serve` session with an
+# empty store, a default profile is provisioned automatically: the existing
+# live config is adopted if there is one, otherwise the bundled stock config
+# (default.config next to this script, overridable with $ZAPRET_DEFAULT_CONFIG)
+# is deployed.
 #
 # Commands:
 #   status [unit]  JSON: installed/active/enabled/config/strategy/profile/profiles
@@ -33,9 +34,12 @@ set -u
 
 SERVICE="${ZAPRET_SERVICE:-zapret}"
 CONFIG="${ZAPRET_CONFIG:-}"
-CONFIGS_DIR="${ZAPRET_CONFIGS_DIR:-/etc/zapret-configs}"
-CONFIGS_PROFILES="$CONFIGS_DIR/profiles"
-CONFIGS_ACTIVE="$CONFIGS_DIR/active"
+# Profile store lives next to the zapret install (/opt/zapret/configs):
+# every profile is a <name>.config file here, and the single active one is
+# symlinked over /opt/zapret/config (what zapret.service actually sources).
+CONFIGS_DIR="${ZAPRET_CONFIGS_DIR:-/opt/zapret/configs}"
+CONFIGS_PROFILES="$CONFIGS_DIR"
+CONFIGS_ACTIVE="$CONFIGS_DIR/.active"
 SCRIPT_DIR=$(cd "$(dirname "$0")" 2>/dev/null && pwd)
 DEFAULT_BUNDLE="${ZAPRET_DEFAULT_CONFIG:-$SCRIPT_DIR/default.config}"
 
@@ -54,6 +58,31 @@ fi
 am_root() { [ "$(id -u)" = 0 ] || [ "${ZAPRET_FAKE_ROOT:-}" = 1 ]; }
 
 CONFIG_CANDIDATES="/etc/zapret/config /usr/local/etc/zapret/config /opt/zapret/config"
+
+# The exact config path the zapret.service on this machine actually sources.
+# Derived from the unit's ExecStart (a `{ path=...; argv[]=... }` property whose
+# `path` points at <base>/init.d/sysv/zapret, which sources <base>/config).
+configs_install_config() {
+  [ -n "$CONFIG" ] && { printf '%s\n' "$CONFIG"; return 0; }
+  local es path base
+  es=$(command -v systemctl >/dev/null 2>&1 && systemctl show "$SERVICE" -p ExecStart --value 2>/dev/null || true)
+  case "$es" in
+    *path=*)
+      path=${es#*path=}
+      path=${path%% *}
+      case "$path" in
+        *init.d/sysv/zapret)
+          base=$(dirname "$(dirname "$(dirname "$path")")" 2>/dev/null)
+          [ -n "$base" ] && { printf '%s\n' "$base/config"; return 0; }
+          ;;
+      esac
+      ;;
+  esac
+  for p in $CONFIG_CANDIDATES; do
+    if [ -d "$(dirname "$p")" ]; then printf '%s\n' "$p"; return 0; fi
+  done
+  return 1
+}
 
 sysctl() {
   command -v systemctl >/dev/null 2>&1 || return 2
@@ -150,24 +179,31 @@ doctor() {
   return "$rc"
 }
 
+# The live config path for status/reporting: the single install config path
+# (from ExecStart), accepted only when actually readable. Kept in sync with
+# configs_install_config so the panel reports the same path we manage (the
+# service's real /opt/zapret/config), never a stale duplicate candidate.
 find_config() {
-  if [ -n "$CONFIG" ]; then
-    [ -r "$CONFIG" ] && { printf '%s\n' "$CONFIG"; return 0; }
-    return 1
-  fi
-  for p in $CONFIG_CANDIDATES; do
-    if [ -r "$p" ]; then printf '%s\n' "$p"; return 0; fi
-  done
-  return 1
+  local p
+  p=$(configs_install_config) || return 1
+  [ -r "$p" ] || return 1
+  printf '%s\n' "$p"
+  return 0
 }
 
-# Where the zapret service sources its config from (parent dir exists).
+# Where the zapret service sources its config from. A broken managed symlink
+# (e.g. after the profile store was wiped) is skipped so bootstrap re-seeds it.
 configs_live_path() {
-  if [ -n "$CONFIG" ]; then printf '%s\n' "$CONFIG"; return 0; fi
-  for p in $CONFIG_CANDIDATES; do
-    if [ -d "$(dirname "$p")" ]; then printf '%s\n' "$p"; return 0; fi
-  done
-  return 1
+  local p
+  p=$(configs_install_config) || return 1
+  if [ -L "$p" ]; then
+    t=$(readlink -f "$p" 2>/dev/null) || return 1
+    case "$t" in
+      "$CONFIGS_PROFILES"*) [ -e "$t" ] || return 1 ;;
+    esac
+  fi
+  printf '%s\n' "$p"
+  return 0
 }
 
 sanitize_name() {
@@ -286,35 +322,68 @@ configs_migrate() {
   echo ok
 }
 
+# True when a zapret config actually enables a daemon (nfqws or tpws). The
+# stock template the zapret package ships disables both, which makes the
+# service start and exit without doing anything — not something worth adopting
+# as the default profile.
+daemons_enabled() {
+  f="${1:-}"
+  [ -f "$f" ] || return 1
+  n=$(sed -n 's/^[[:space:]]*NFQWS_ENABLE=\([0-9]*\).*/\1/p' "$f" | tail -n1)
+  t=$(sed -n 's/^[[:space:]]*TPWS_ENABLE=\([0-9]*\).*/\1/p' "$f" | tail -n1)
+  [ "${n:-0}" = 1 ] || [ "${t:-0}" = 1 ]
+}
+
 # Root: first-use provisioning so the panel works out of the box. No-op once
 # the profile store has anything in it. If zapret's live config already exists
-# as a plain file it is adopted as the "default" profile (same as an explicit
-# migrate — nothing lost, stock stays recoverable). Otherwise the bundled
-# stock config (default.config next to this script) is deployed, covering a
-# bare zapret install that never got a config. Never touches an existing setup.
+# as a plain file and actually enables a daemon, it is adopted as the "default"
+# profile (same as an explicit migrate — nothing lost, stock stays recoverable).
+# A fresh/blank template (no daemon enabled) or a bare zapret install gets the
+# bundled stock config (default.config next to this script), which enables
+# nfqws on 80/443 out of the box. Never touches an existing setup.
 bootstrap() {
   config_profiles_list | grep -q . && return 0
   root_setup || return 1
   live=""
+  seeded_from_bundle=false
   if configs_live_path >/dev/null 2>&1; then live=$(configs_live_path); fi
   [ -e "${live:-/nonexistent}" ] || live=""
-  if [ -n "$live" ] && [ -f "$live" ] && [ ! -L "$live" ]; then
+  if [ -n "$live" ] && [ -f "$live" ] && [ ! -L "$live" ] && daemons_enabled "$live"; then
+    # Existing, working, plain-file config: adopt it untouched.
     cp "$live" "$CONFIGS_PROFILES/default.config" 2>/dev/null || return 1
   elif [ -r "$DEFAULT_BUNDLE" ]; then
+    # Blank template, no custom config, or a broken managed symlink: deploy the
+    # bundled working config (nfqws on 80/443) as the default profile.
     cp "$DEFAULT_BUNDLE" "$CONFIGS_PROFILES/default.config" 2>/dev/null || return 1
+    seeded_from_bundle=true
   else
     return 0
   fi
   chmod 644 "$CONFIGS_PROFILES/default.config" 2>/dev/null
   printf '%s\n' "default" > "$CONFIGS_ACTIVE" 2>/dev/null || return 1
   chmod 644 "$CONFIGS_ACTIVE" 2>/dev/null
-  if [ -n "$live" ]; then
-    deploy_live "default" || return 1
-  else
-    live="${CONFIG:-"$(printf '%s\n' $CONFIG_CANDIDATES | head -n1)"}"
-    mkdir -p "$(dirname "$live")" 2>/dev/null || return 1
-    ln -s "$CONFIGS_PROFILES/default.config" "$live" 2>/dev/null || return 1
-  fi
+  # Point every candidate dir that is a managed profile symlink at the seeded
+  # profile. This always includes the single install path (deploy_live), plus
+  # heals any stale/duplicate managed link in the other candidate dirs (e.g.
+  # /etc/zapret/config when the real install uses /opt/zapret/config). Plain
+  # files and non-managed links are never touched.
+  {
+    if [ "$seeded_from_bundle" = true ]; then
+      for p in $CONFIG_CANDIDATES; do
+        [ -L "$p" ] || continue
+        t=$(readlink "$p" 2>/dev/null) || continue
+        case "$t" in
+          "$CONFIGS_PROFILES"*) printf '%s\n' "$p" ;;
+        esac
+      done
+    fi
+    [ -n "$live" ] && printf '%s\n' "$live"
+  } | while IFS= read -r p; do
+    [ -n "$p" ] || continue
+    rm -f "$p" 2>/dev/null
+    mkdir -p "$(dirname "$p")" 2>/dev/null
+    ln -s "$CONFIGS_PROFILES/default.config" "$p" 2>/dev/null
+  done
   maybe_restart
   return 0
 }
@@ -322,12 +391,12 @@ bootstrap() {
 status_json() {
   deps_s=$(deps_json)
   command -v systemctl >/dev/null 2>&1 || {
-    printf '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
+    printf '{"installed":false,"active":false,"enabled":false,"config":null,"configFile":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
       "$deps_s"
     return 0
   }
   if ! unit_known; then
-    printf '{"installed":false,"active":false,"enabled":false,"config":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
+    printf '{"installed":false,"active":false,"enabled":false,"config":null,"configFile":null,"strategy":null,"profile":null,"profiles":[],"deps":%s}\n' \
       "$deps_s"
     return 0
   fi
@@ -349,9 +418,14 @@ status_json() {
     fi
   fi
   aprof=$(configs_active_from_live)
+  config_file="null"
+  if [ -n "$aprof" ] && [ "$aprof" != "null" ]; then
+    a=$(printf '%s\n' "$aprof" | tr -d '"')
+    [ -f "$CONFIGS_PROFILES/$a.config" ] && config_file="\"$CONFIGS_PROFILES/$a.config\""
+  fi
   plist=$(config_profiles_list | json_array)
-  printf '{"installed":true,"active":%s,"enabled":%s,"config":%s,"strategy":%s,"profile":%s,"profiles":%s,"deps":%s}\n' \
-    "$active" "$enabled" "$config_line" "$strategy" "$aprof" "$plist" "$deps_s"
+  printf '{"installed":true,"active":%s,"enabled":%s,"config":%s,"configFile":%s,"strategy":%s,"profile":%s,"profiles":%s,"deps":%s}\n' \
+    "$active" "$enabled" "$config_line" "$config_file" "$strategy" "$aprof" "$plist" "$deps_s"
 }
 
 action() { run "$@"; }

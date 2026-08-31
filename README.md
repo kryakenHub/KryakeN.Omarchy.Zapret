@@ -25,7 +25,7 @@ Developed and validated on Omarchy 4.0.1.
   `/opt/zapret/config` (override with `ZAPRET_CONFIG`). On Arch with an AUR
   helper this is `yay -S zapret`.
 - Root (via `sudo` on a TTY or `pkexec` from the panel) to manage the unit and
-  the config profile store under `/etc/zapret-configs`.
+  the config profile store under `/opt/zapret/configs`.
 
 ### Validate the setup
 
@@ -48,10 +48,10 @@ bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
 
 2. Restart the shell and open the Zapret panel. On first use the plugin
    provisions a `default` config profile automatically: it adopts your current
-   live zapret config if one exists, otherwise it deploys the bundled stock
-   config (`default.config`). The first config you add later becomes active
-   automatically. To import the current stock zapret config as the `default`
-   profile manually, run:
+   live zapret config if one exists and actually enables a daemon, otherwise it
+   deploys the bundled working config (`default.config`, nfqws on 80/443). The
+   first config you add later becomes active automatically. To import the
+   current stock zapret config as the `default` profile manually, run:
 
    ```sh
    sudo backend.sh configs migrate
@@ -81,16 +81,17 @@ omarchy plugin remove kryaken.omarchy.zapret
 ```
 
 The plugin never writes inside the plugin folder — runtime data lives in
-`/etc/zapret-configs` and the `zapret` unit, and those are left untouched so
+`/opt/zapret/configs` and the `zapret` unit, and those are left untouched so
 the daemon keeps working after the plugin is gone.
 
 ## Config profiles
 
-Profiles are complete zapret `config` files stored under
-`/etc/zapret-configs/profiles/<name>.config`. The active profile is symlinked
-over the live config path (`$ZAPRET_CONFIG`, else the first existing candidate
-listed above), so `zapret.service` picks it up at start without touching the
-rest of your zapret install.
+Profiles are complete zapret `config` files stored directly under
+`/opt/zapret/configs/<name>.config` — one file per profile, all in one folder.
+`zapret.service` only ever reads `/opt/zapret/config`, so the single active
+profile is symlinked over that path; switching profiles just re-points the
+symlink and restarts the unit, without touching the rest of your zapret
+install.
 
 - On the first privileged `serve` session with an empty store, a `default`
   profile is provisioned automatically: an existing plain live config is
@@ -148,7 +149,7 @@ add/select/remove/migrate) run through a single persistent helper process:
 | --- | --- | --- |
 | `ZAPRET_SERVICE` | `zapret` | systemd unit controlling the daemon |
 | `ZAPRET_CONFIG` | auto | force the live config path |
-| `ZAPRET_CONFIGS_DIR` | `/etc/zapret-configs` | profile store |
+| `ZAPRET_CONFIGS_DIR` | `/opt/zapret/configs` | profile store |
 | `ZAPRET_DEFAULT_CONFIG` | bundled `default.config` | stock config deployed when none exists |
 | `ZAPRET_PRIV` | `sudo`/`pkexec` | privilege wrapper (TTY vs panel) |
 | `ZAPRET_FAKE_ROOT` | – | testing: skip self-elevation, run fs ops as the caller |

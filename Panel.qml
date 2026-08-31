@@ -79,11 +79,13 @@ Panel {
   property bool _enabled: false
   property string _strategy: ""
   property string _config: ""
+  property string _configFile: ""
   property string _error: ""
   property var _profiles: []
   property string _activeProfile: ""
   property var _deps: []
   property string cfgMsg: ""
+  property bool cfgMsgIsError: false
   // Статус-сообщение (конфиг-операции) исчезает само через 5 с.
   Timer {
     id: cfgMsgDismiss
@@ -92,6 +94,13 @@ Panel {
   }
   onCfgMsgChanged: {
     if (root.cfgMsg !== "") cfgMsgDismiss.restart()
+  }
+  // Последняя ошибка (serve/status) показывается достаточно долго, чтобы её
+  // можно было прочитать, прежде чем она пропадёт.
+  Timer {
+    id: errorDismiss
+    interval: 9000
+    onTriggered: root._error = ""
   }
   // TextInput содержимое (ids дочерних полей не резолвятся из root-скоупа —
   // грузим значение в свойство и читаем его).
@@ -212,6 +221,7 @@ Panel {
       function(code, out, err) {
         Model.state.error = (err || "toggle failed").trim()
         root._error = Model.state.error
+        if (root._error !== "") root.errorDismiss.restart()
         root.refreshStatus()
       })
   }
@@ -234,10 +244,11 @@ Panel {
     var input = root._addInput
     if (input === "" || root.isBusy) return
     root.cfgMsg = ""
+    root.cfgMsgIsError = false
     root._clearAddOnSuccess = true
     root._serveEnqueue(["configs", "add", root._addName, input],
       function(out, err, code) {
-        if (out !== "") root.cfgMsg = out
+        if (out !== "") { root.cfgMsg = out; root.cfgMsgIsError = false }
         if (root._clearAddOnSuccess) { root._addInput = ""; root._addName = "" }
         root._clearAddOnSuccess = false
         console.log("[kryaken.omarchy.zapret] configs add: out=" + out + " err=" + err)
@@ -245,6 +256,7 @@ Panel {
       },
       function(code, out, err) {
         root.cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsgIsError = true
         root._clearAddOnSuccess = false
         console.log("[kryaken.omarchy.zapret] configs add failed: rc=" + code + " out=" + out + " err=" + err)
         root.refreshStatus()
@@ -254,14 +266,16 @@ Panel {
   function selectConfig(name) {
     if (root.isBusy) return
     root.cfgMsg = ""
+    root.cfgMsgIsError = false
     root._clearAddOnSuccess = false
     root._serveEnqueue(["configs", "select", name],
       function(out, err, code) {
-        if (out !== "") root.cfgMsg = out
+        if (out !== "") { root.cfgMsg = out; root.cfgMsgIsError = false }
         root.refreshStatus()
       },
       function(code, out, err) {
         root.cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsgIsError = true
         root.refreshStatus()
       })
   }
@@ -269,14 +283,16 @@ Panel {
   function removeConfig(name) {
     if (root.isBusy) return
     root.cfgMsg = ""
+    root.cfgMsgIsError = true
     root._clearAddOnSuccess = false
     root._serveEnqueue(["configs", "remove", name],
       function(out, err, code) {
-        if (out !== "") root.cfgMsg = out
+        if (out !== "") { root.cfgMsg = out; root.cfgMsgIsError = true }
         root.refreshStatus()
       },
       function(code, out, err) {
         root.cfgMsg = (err || out || "config operation failed").trim()
+        root.cfgMsgIsError = true
         root.refreshStatus()
       })
   }
@@ -346,9 +362,11 @@ Panel {
       root._enabled = Model.state.enabled
       root._strategy = Model.state.strategy
       root._config = Model.state.config
+      root._configFile = Model.state.configFile
       root._error = Model.state.error
       root._profiles = Model.state.profiles
       root._activeProfile = Model.state.profile
+      if (root._error !== "") root.errorDismiss.restart()
       var missing = []
       for (var di = 0; di < Model.state.deps.length; di++) {
         if (!Model.state.deps[di].ok) missing.push(Model.state.deps[di])
@@ -628,10 +646,11 @@ Panel {
           Text {
             width: parent.width
             visible: root._profiles.length === 0
+            wrapMode: Text.WordWrap
             color: root.dimColor
             text: root._activeProfile !== ""
               ? "Current: " + root._activeProfile
-              : "No configs yet — the plugin seeds its default config on first use."
+              : "No configs yet — the first start provisions a default profile automatically."
             font.family: root.panelFont
             font.pixelSize: Style.font.caption
           }
@@ -795,7 +814,7 @@ Panel {
             font.family: root.panelFont
             font.pixelSize: Style.font.caption
             font.bold: true
-            color: root.accentColor
+            color: root.cfgMsgIsError ? "#EF4444" : "#10B981"
             visible: root.cfgMsg !== ""
           }
         }
@@ -814,7 +833,8 @@ Panel {
           text: {
             var parts = []
             parts.push("Service: " + root.serviceName + ".service")
-            if (root.configPath !== "") parts.push("Config: " + root.configPath)
+            if (root._configFile !== "")
+              parts.push("Config file: " + root._configFile)
             return parts.join("\n")
           }
         }

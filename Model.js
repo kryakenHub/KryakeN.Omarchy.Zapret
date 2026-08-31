@@ -5,6 +5,7 @@ var state = {
   running: false,
   enabled: false,
   config: "",
+  configFile: "",
   strategy: "",
   profile: "",
   profiles: [],
@@ -17,6 +18,7 @@ function reset() {
   state.running = false
   state.enabled = false
   state.config = ""
+  state.configFile = ""
   state.strategy = ""
   state.profile = ""
   state.profiles = []
@@ -36,6 +38,7 @@ function parseStatus(raw) {
     state.running = !!o.active
     state.enabled = !!o.enabled
     state.config = String(o.config || "")
+    state.configFile = String(o.configFile || "")
     state.strategy = String(o.strategy || "")
     state.profile = String(o.profile || "")
     state.profiles = Array.isArray(o.profiles) ? o.profiles : []
