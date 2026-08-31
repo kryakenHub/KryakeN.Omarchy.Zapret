@@ -216,6 +216,10 @@ Panel {
 
   function toggleDaemon() {
     if (!root.isInstalled || root.isBusy) return
+    // Optimistic: flip the running state immediately so the switch reacts even
+    // on the first call, when launching the pkexec serve helper may take a
+    // moment (password prompt). The next status poll reconciles reality.
+    root._running = !root._running
     root._serveEnqueue(["toggle"],
       function() { root.refreshStatus() },
       function(code, out, err) {

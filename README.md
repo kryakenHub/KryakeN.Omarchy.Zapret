@@ -47,13 +47,14 @@ bash ~/.config/omarchy/plugins/kryaken.omarchy.zapret/backend.sh doctor
    ```
 
 2. Restart the shell and open the Zapret panel. On first use the plugin
-   provisions a `default` config profile automatically and makes it the active
-   one: it adopts your current live zapret config if one exists and actually
-   enables a daemon, otherwise it deploys the bundled working config
-   (`default.config`, nfqws on 80/443) and points the live config at it — no
-   manual "Use" needed. The first config you add later becomes active
-   automatically too. To import the current stock zapret config as the `default`
-   profile manually, run:
+   provisions a `default` config profile automatically, makes it the active one
+   and starts the daemon: it adopts your current live zapret config if one
+   exists and actually enables a daemon, otherwise it deploys the bundled
+   working config (`default.config`, nfqws on 80/443) and points the live config
+   at it — protection is up with no manual toggle or "Use" needed. Autostart
+   (starting with the system) is left for you to enable explicitly. The first
+   config you add later becomes active automatically too. To import the current
+   stock zapret config as the `default` profile manually, run:
 
    ```sh
    sudo backend.sh configs migrate
